@@ -1,0 +1,9 @@
+flask
+numpy
+opencv-python
+torch
+gunicorn
+deepface
+mtcnn
+tensorflow
+# add insightface or deepface as needed

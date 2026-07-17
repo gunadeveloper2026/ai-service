@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+env/
+.venv/
+venv*/
+
+# Environment
+.env
+.env.*
+instance/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Test
+.pytest_cache/
+.pytest_cache/
+
+# Persistent DB files
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# Model artifacts
+checkpoints/
+model_outputs/
+*.pt
+*.pth
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Misc
+*.so
