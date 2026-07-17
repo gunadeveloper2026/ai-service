@@ -18,6 +18,9 @@ except ImportError:
 def _read_image(stream):
     stream.seek(0)
     data = stream.read()
+    if not data:
+        raise ValueError('Empty image stream')
+    
     arr = np.frombuffer(data, np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is not None:
@@ -27,10 +30,11 @@ def _read_image(stream):
         try:
             image = Image.open(io.BytesIO(data)).convert('RGB')
             return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        except Exception:
+        except Exception as e:
+            print(f"PIL decode failed: {e}")
             return None
 
-    return None
+    raise ValueError('Unable to decode image - cv2.imdecode and PIL both failed')
 
 
 def _fallback_embedding(img, size=(160, 160), dim=128):
@@ -54,13 +58,23 @@ def compute_embedding_from_stream(stream, model_name='Facenet', detector_backend
     img = _read_image(stream)
     if img is None:
         raise ValueError('Unable to decode image')
+    
     if DEEPFACE_AVAILABLE:
-        rep = DeepFace.represent(img_path=img, model_name=model_name, detector_backend=detector_backend, enforce_detection=True)
-        if isinstance(rep, list) and len(rep) and isinstance(rep[0], (list, np.ndarray)):
-            emb = np.array(rep[0], dtype=float)
-        else:
-            emb = np.array(rep, dtype=float)
-        return emb.tolist()
+        try:
+            # DeepFace.represent accepts numpy arrays directly
+            rep = DeepFace.represent(img, model_name=model_name, detector_backend=detector_backend, enforce_detection=False)
+            if isinstance(rep, list) and len(rep) and isinstance(rep[0], dict):
+                emb = np.array(rep[0].get('embedding', []), dtype=float)
+            elif isinstance(rep, list) and len(rep):
+                emb = np.array(rep[0], dtype=float)
+            else:
+                emb = np.array(rep, dtype=float)
+            if emb.size == 0:
+                raise ValueError('Empty embedding returned from DeepFace')
+            return emb.tolist()
+        except Exception as e:
+            print(f"DeepFace error: {e}, falling back to simple embedding")
+            return _fallback_embedding(img)
     else:
         return _fallback_embedding(img)
 
