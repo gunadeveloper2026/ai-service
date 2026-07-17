@@ -2,17 +2,7 @@ import io
 import json
 import numpy as np
 import cv2
-
-try:
-    from deepface import DeepFace
-    DEEPFACE_AVAILABLE = True
-except Exception:
-    DEEPFACE_AVAILABLE = False
-
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
+from PIL import Image
 
 
 def _read_image(stream):
@@ -26,57 +16,40 @@ def _read_image(stream):
     if img is not None:
         return img
 
-    if Image is not None:
-        try:
-            image = Image.open(io.BytesIO(data)).convert('RGB')
-            return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        except Exception as e:
-            print(f"PIL decode failed: {e}")
-            return None
-
-    raise ValueError('Unable to decode image - cv2.imdecode and PIL both failed')
+    try:
+        image = Image.open(io.BytesIO(data)).convert('RGB')
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    except Exception as e:
+        raise ValueError(f'Unable to decode image: {e}')
 
 
-def _fallback_embedding(img, size=(160, 160), dim=128):
-    # simple deterministic embedding: resize, convert to grayscale, normalize and project
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    small = cv2.resize(gray, size)
-    vec = small.flatten().astype(np.float32)
-    # normalize
-    vec = (vec - vec.mean()) / (vec.std() + 1e-9)
-    # reduce/expand to `dim`
-    if vec.size >= dim:
-        emb = vec[:dim]
-    else:
-        emb = np.pad(vec, (0, dim - vec.size), 'constant')
-    # L2 normalize
-    emb = emb / (np.linalg.norm(emb) + 1e-9)
-    return emb.tolist()
+def _extract_face_embedding(img, size=(160, 160), dim=128):
+    """Simple face embedding: resize to grayscale, normalize, flatten."""
+    try:
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Resize to standard size
+        resized = cv2.resize(gray, size)
+        # Flatten
+        vec = resized.flatten().astype(np.float32)
+        # Normalize
+        vec = (vec - vec.mean()) / (vec.std() + 1e-9)
+        # Project to embedding dimension
+        if vec.size >= dim:
+            emb = vec[:dim]
+        else:
+            emb = np.pad(vec, (0, dim - vec.size), 'constant')
+        # L2 normalize
+        emb = emb / (np.linalg.norm(emb) + 1e-9)
+        return emb.tolist()
+    except Exception as e:
+        raise ValueError(f'Failed to extract embedding: {e}')
 
 
-def compute_embedding_from_stream(stream, model_name='Facenet', detector_backend='mtcnn'):
+def compute_embedding_from_stream(stream, **kwargs):
+    """Extract face embedding from image stream."""
     img = _read_image(stream)
-    if img is None:
-        raise ValueError('Unable to decode image')
-    
-    if DEEPFACE_AVAILABLE:
-        try:
-            # DeepFace.represent accepts numpy arrays directly
-            rep = DeepFace.represent(img, model_name=model_name, detector_backend=detector_backend, enforce_detection=False)
-            if isinstance(rep, list) and len(rep) and isinstance(rep[0], dict):
-                emb = np.array(rep[0].get('embedding', []), dtype=float)
-            elif isinstance(rep, list) and len(rep):
-                emb = np.array(rep[0], dtype=float)
-            else:
-                emb = np.array(rep, dtype=float)
-            if emb.size == 0:
-                raise ValueError('Empty embedding returned from DeepFace')
-            return emb.tolist()
-        except Exception as e:
-            print(f"DeepFace error: {e}, falling back to simple embedding")
-            return _fallback_embedding(img)
-    else:
-        return _fallback_embedding(img)
+    return _extract_face_embedding(img)
 
 
 def _cosine_distance(a, b):
@@ -93,7 +66,7 @@ def _cosine_distance(a, b):
 
 
 def match_embedding(embedding, gallery, top_k=5):
-    # gallery: list of dicts { 'id': ..., 'embedding': [...] }
+    """Find top-k matches from gallery."""
     results = []
     for entry in gallery:
         vec = entry.get('embedding') or entry.get('vector')
@@ -107,10 +80,10 @@ def match_embedding(embedding, gallery, top_k=5):
 
 def recognize_face(stream, gallery=None, threshold=0.35):
     """
-    Compute embedding for uploaded image and optionally match against a provided gallery.
-
+    Extract embedding for uploaded image and optionally match against gallery.
+    
     - `stream`: file-like image stream
-    - `gallery`: either a Python list or a JSON string representing a list of entries with `embedding` vectors
+    - `gallery`: JSON string or list of entries with `embedding` vectors
     Returns: dict with `embedding`, optional `matches`, `best`, and `matched` boolean.
     """
     try:
