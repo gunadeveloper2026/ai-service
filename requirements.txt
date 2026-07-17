@@ -1,9 +1,8 @@
-flask
-numpy
-opencv-python
-torch
-gunicorn
-deepface
-mtcnn
-tensorflow
-# add insightface or deepface as needed
+flask==3.0.0
+numpy==1.24.3
+opencv-python==4.8.0.74
+gunicorn==21.2.0
+deepface==0.0.92
+mtcnn==0.1.1
+tensorflow==2.14.0
+pillow==10.0.0

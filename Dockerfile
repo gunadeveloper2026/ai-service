@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /app
 
@@ -10,4 +10,4 @@ COPY . .
 ENV PORT=6000
 EXPOSE 6000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-6000} app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:6000", "app:app"]
